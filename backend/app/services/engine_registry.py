@@ -81,6 +81,7 @@ def hosted_adapters() -> dict:
     from app.services.boat_adapter import BoatClaudeAdapter, SdkBoatBoxes
 
     labels = {"codex": "Codex", "cursor": "Cursor", "gemini": "Gemini CLI",
+              "gemini_api": "Google Gemini (API key)",
               "antigravity": "Google Gemini (Antigravity)", "opencode": "OpenCode (experimental)",
               "openrouter": "OpenRouter", "acp": "ACP agent", "openai_compat": "OpenAI-compatible"}
     adapters: dict = {"claude": BoatClaudeAdapter(SdkBoatBoxes())}
@@ -100,7 +101,7 @@ def default_adapters() -> dict:
     from app.services.acp_presets import GeminiAdapter, CursorAdapter, OpenCodeAdapter
     from app.services.claude_adapter import ClaudeAdapter
     from app.services.codex_adapter import CodexAdapter
-    from app.services.openai_chat_adapter import OpenAIChatAdapter, OpenRouterAdapter
+    from app.services.openai_chat_adapter import GeminiApiAdapter, OpenAIChatAdapter, OpenRouterAdapter
 
     adapters: dict = {}
     for key, label, factory in (
@@ -111,6 +112,7 @@ def default_adapters() -> dict:
         ("antigravity", "Google Gemini (Antigravity)", AntigravityAdapter),
         ("opencode", "OpenCode (experimental)", OpenCodeAdapter),
         ("openrouter", "OpenRouter", OpenRouterAdapter),
+        ("gemini_api", "Google Gemini (API key)", GeminiApiAdapter),
         ("acp", "ACP agent", AcpAdapter),
         ("openai_compat", "OpenAI-compatible", OpenAIChatAdapter),
     ):

@@ -48,6 +48,14 @@ NOT_CONFIGURED = "Set the endpoint's address (and key, if it needs one) in Setti
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_HOST = "openrouter.ai"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+GEMINI_MODELS = (
+    "gemini-3.8-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+)
 # OpenRouter's optional app attribution (its public app rankings).
 OPENROUTER_ATTRIBUTION = {"HTTP-Referer": "https://github.com/Anil-matcha/suparagent", "X-Title": "Suparagent"}
 
@@ -554,6 +562,91 @@ class OpenRouterAdapter(OpenAIChatAdapter):
         config = ctx.engine_config or self.config or {}
         if not config.get("api_key") or config.get("base_url", OPENROUTER_BASE_URL) != OPENROUTER_BASE_URL:
             return TurnOutcome("failed", error="Save your OpenRouter key in Settings → Engines. For a proxy use the OpenAI-compatible engine.", error_code="engine_not_configured")
+        if not ctx.model and not config.get("model"):
+            probe = await self._probe_config(config)
+            ctx.model = next((model.id for model in probe.models or [] if model.default), None)
+        return await super().run_turn(ctx, sink, gate)
+
+
+class GeminiApiAdapter(OpenAIChatAdapter):
+    """Google Gemini through its official OpenAI-compatible endpoint.
+
+    A preset with a fixed address: the person only saves a Gemini API key and
+    optionally a default model. Like the generic compatible engine, this is
+    chat only: no tools, approvals or computer/browser control.
+    """
+
+    preset = True
+    key = "gemini_api"
+    label = "Google Gemini (API key)"
+    config_fields = [
+        {"name": "api_key", "label": "Gemini API key", "kind": "secret", "required": True},
+        {"name": "model", "label": "Default model", "placeholder": "gemini-3.8-flash"},
+    ]
+    setup = {
+        "credential": "api_key",
+        "docs_url": "https://aistudio.google.com/apikey",
+        "notes": [
+            "Create a key in Google AI Studio and save it here. Encrypted at rest.",
+            "Chat only: Gemini through this endpoint has no tools, computer or browser.",
+            "Requests go to Google generativelanguage.googleapis.com with your key.",
+        ],
+    }
+    not_configured = "Add your Gemini API key in Settings → Engines."
+    max_models = 60
+
+    def validate_config(self, payload: dict, current: dict | None) -> dict:
+        config = super().validate_config({**payload, "base_url": GEMINI_BASE_URL}, current)
+        if not config.get("api_key"):
+            raise InvalidConfig("Give your Gemini API key (Google AI Studio → Get API key).")
+        return config
+
+    async def probe(self) -> EngineProbe:
+        return await self._probe_config(self.config or {})
+
+    async def _probe_config(self, config: dict) -> EngineProbe:
+        if not config.get("api_key"):
+            return EngineProbe(installed=False, ready=False, reason=self.not_configured)
+        if config.get("base_url", GEMINI_BASE_URL).rstrip("/") != GEMINI_BASE_URL:
+            return EngineProbe(
+                installed=True, ready=False,
+                reason="Gemini uses its fixed address. Use the OpenAI-compatible engine for a proxy.",
+            )
+        try:
+            async with self._client(httpx.Timeout(PROBE_TIMEOUT_SECONDS)) as client:
+                response = await client.get(f"{GEMINI_BASE_URL}/models", headers=self._headers(config))
+                if response.status_code in (401, 403):
+                    return EngineProbe(
+                        installed=True, ready=False, signed_in=False,
+                        reason="Google refused the key. Save a valid Gemini API key in Settings → Engines.",
+                    )
+                if response.status_code != 200:
+                    return EngineProbe(
+                        installed=True, ready=False,
+                        reason=f"Google's model list answered {response.status_code}. Try again later.",
+                    )
+                data = response.json().get("data")
+        except (httpx.HTTPError, ValueError, AttributeError) as exc:
+            reason = exc.__class__.__name__ if isinstance(exc, httpx.HTTPError) else "an unreadable model list"
+            return EngineProbe(installed=True, ready=False, reason=f"Google did not answer ({reason}).")
+        ids = {
+            item["id"] for item in (data if isinstance(data, list) else [])
+            if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"].startswith("gemini-")
+        }
+        ids = sorted(ids)[:self.max_models] or list(GEMINI_MODELS)
+        default = config.get("model") or next((m for m in GEMINI_MODELS if m in ids), ids[0])
+        models = [
+            ModelOption(model, model, model == default)
+            for model in (list(dict.fromkeys([default, *ids]))[:self.max_models])
+        ]
+        return EngineProbe(installed=True, ready=True, signed_in=True, models=models or None)
+
+    async def run_turn(self, ctx, sink, gate):
+        config = ctx.engine_config or self.config or {}
+        if not config.get("api_key"):
+            return TurnOutcome(
+                "failed", error=self.not_configured, error_code="engine_not_configured"
+            )
         if not ctx.model and not config.get("model"):
             probe = await self._probe_config(config)
             ctx.model = next((model.id for model in probe.models or [] if model.default), None)
