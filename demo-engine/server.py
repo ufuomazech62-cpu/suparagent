@@ -28,7 +28,7 @@ def chunk(text=None, finish=None, usage=None):
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
-    def log_message(self, fmt, *args):
+    def log_message(self, format, *args):  # noqa: A002 - matches BaseHTTPRequestHandler
         pass
 
     def do_GET(self):
