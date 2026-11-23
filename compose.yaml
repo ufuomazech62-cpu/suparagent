@@ -50,6 +50,16 @@ services:
     # A stop ends running conversations cleanly; give it the time the systemd unit gives.
     stop_grace_period: 30s
 
+  # Demo-only OpenAI-compatible endpoint. No real model or external key.
+  demo-engine:
+    image: python:3.12-alpine
+    working_dir: /app
+    volumes:
+      - ./demo-engine/server.py:/app/server.py:ro
+    command: ["python", "server.py"]
+    expose: ["9000"]
+    restart: unless-stopped
+
 networks:
   default:
     ipam:
