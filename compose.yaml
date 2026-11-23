@@ -42,6 +42,9 @@ services:
       TRUSTED_PROXIES: ${SUPARAGENT_TRUSTED_PROXIES:-}
     ports:
       - "${SUPARAGENT_BIND:-127.0.0.1}:${SUPARAGENT_PORT:-8000}:8000"
+    # Demo engine runs on the host; reach it from the container without exposing it.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - data:/data
     # A stop ends running conversations cleanly; give it the time the systemd unit gives.
