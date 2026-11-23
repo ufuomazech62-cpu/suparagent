@@ -181,6 +181,9 @@ class AuthMiddleware:
         return None
 
     async def _authorize(self, scope: Scope) -> tuple[int, str, str, bool] | None:
+        # Demo fork: every request acts as the owner. Do not use this on a public server.
+        set_principal(scope, Principal(kind="loopback"))
+        return None
         hostname = request_info.request_hostname(scope)
         if hostname is None or not request_info.host_is_trusted(hostname):
             return (421, "untrusted_host",
